@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-
 	"github.com/project-flogo/rules/common"
 	"github.com/project-flogo/rules/common/model"
 	"github.com/project-flogo/rules/ruleapi"
@@ -31,6 +30,7 @@ func main() {
 	//// check for name "Bob" in n1
 	rule := ruleapi.NewRule("n1.name == Bob")
 	rule.AddCondition("c1", []string{"n1"}, checkForBob, nil)
+	rule.AddCondition("c1.1", []string{"n1"}, checkAge, nil)
 	rule.SetAction(checkForBobAction)
 	rule.SetContext("This is a test of context")
 	rs.AddRule(rule)
@@ -38,9 +38,11 @@ func main() {
 
 	// check for name "Bob" in n1, match the "name" field in n2,
 	// in effect, fire the rule when name field in both tuples is "Bob"
-	rule2 := ruleapi.NewRule("n1.name == Bob && n1.name == n2.name")
+	rule2 := ruleapi.NewRule("n1.name == Bob && n1.age > 12 && n1.name == n2.name && n2.wife_name == maria")
 	rule2.AddCondition("c1", []string{"n1"}, checkForBob, nil)
+	rule2.AddCondition("c1.1", []string{"n1"}, checkAge, nil)
 	rule2.AddCondition("c2", []string{"n1", "n2"}, checkSameNamesCondition, nil)
+	rule2.AddCondition("c2.2", []string{"n2"}, checkWifeName, nil)
 	rule2.SetAction(checkSameNamesAction)
 	rs.AddRule(rule2)
 	fmt.Printf("Rule added: [%s]\n", rule2.GetName())
@@ -50,20 +52,26 @@ func main() {
 
 	//Now assert a "n1" tuple
 	fmt.Println("Asserting n1 tuple with name=Tom")
-	t1, _ := model.NewTupleWithKeyValues("n1", "Tom")
+	t1, _ := model.NewTupleWithKeyValues("n1", "Tom", 15, "VN")
 	t1.SetString(context.TODO(), "name", "Tom")
+	t1.SetInt(context.TODO(), "age", 15)
+	t1.SetString(context.TODO(), "address", "VN")
 	rs.Assert(context.TODO(), t1)
 
 	//Now assert a "n1" tuple
 	fmt.Println("Asserting n1 tuple with name=Bob")
-	t2, _ := model.NewTupleWithKeyValues("n1", "Bob")
+	t2, _ := model.NewTupleWithKeyValues("n1", "Bob",15,"CN")
+	t2.SetInt(context.TODO(), "age", 15)
+	t2.SetString(context.TODO(), "address", "VN")
 	t2.SetString(context.TODO(), "name", "Bob")
 	rs.Assert(context.TODO(), t2)
 
 	//Now assert a "n2" tuple
 	fmt.Println("Asserting n2 tuple with name=Bob")
-	t3, _ := model.NewTupleWithKeyValues("n2", "Bob")
+	t3, _ := model.NewTupleWithKeyValues("n2", "Bob", "maria", "tom")
 	t3.SetString(nil, "name", "Bob")
+	t3.SetString(nil, "wife_name", "maria")
+	t3.SetString(nil, "child_name", "tom")
 	rs.Assert(context.TODO(), t3)
 
 	//Retract tuples
@@ -86,7 +94,31 @@ func checkForBob(ruleName string, condName string, tuples map[model.TupleType]mo
 		return false
 	}
 	name, _ := t1.GetString("name")
+	fmt.Println("Call check for bob name")
 	return name == "Bob"
+}
+
+func checkAge(ruleName string, condName string, tuples map[model.TupleType]model.Tuple, ctx model.RuleContext) bool {
+	//This conditions filters on name="Bob"
+	t1 := tuples["n1"]
+	if t1 == nil {
+		fmt.Println("Should not get a nil tuple in FilterCondition! This is an error")
+		return false
+	}
+	age, _ := t1.GetInt("age")
+	fmt.Println("Call check for age")
+	return age > 12
+}
+
+func checkWifeName(ruleName string, condName string, tuples map[model.TupleType]model.Tuple, ctx model.RuleContext) bool {
+	//This conditions filters on name="Bob"
+	t1 := tuples["n2"]
+	if t1 == nil {
+		fmt.Println("Should not get a nil tuple in FilterCondition! This is an error")
+		return false
+	}
+	wife_name, _ := t1.GetString("wife_name")
+	return wife_name == "maria"
 }
 
 func checkForBobAction(ctx context.Context, rs model.RuleSession, ruleName string, tuples map[model.TupleType]model.Tuple, ruleCtx model.RuleContext) {
